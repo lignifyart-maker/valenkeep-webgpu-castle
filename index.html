@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d0c0a" />
+    <meta
+      name="description"
+      content="Valenkeep Sanctum — 以 WebGPU 即時渲染的寫實哥德式古堡王座大殿，具備漂浮鏡頭、彩繪玻璃玫瑰花窗、體積光束與動態壁爐火光。"
+    />
+    <title>VALENKEEP — WebGPU 寫實古堡王座大殿</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpolygon fill='%23d4af6a' points='32,4 56,18 56,46 32,60 8,46 8,18'/%3E%3Ccircle fill='%2311100e' cx='32' cy='32' r='14'/%3E%3Ccircle fill='%23d4af6a' cx='32' cy='32' r='5'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="viewport" aria-label="Interactive WebGPU 3D Castle Interior"></div>
+    <div class="vignette-overlay" aria-hidden="true"></div>
+
+    <!-- Loading Screen -->
+    <div id="loader" role="status" aria-live="polite">
+      <div class="loader-crest">
+        <svg viewBox="0 0 80 80" aria-hidden="true">
+          <circle cx="40" cy="40" r="34" />
+          <circle cx="40" cy="40" r="22" stroke-dasharray="4 4" />
+          <path d="M40 6 L40 74 M6 40 L74 40 M16 16 L64 64 M64 16 L16 64" />
+          <circle cx="40" cy="40" r="8" class="crest-core" />
+        </svg>
+      </div>
+      <p class="loader-sub">REAL-TIME WEBGPU ARCHITECTURAL SANCTUM</p>
+      <h1 class="loader-title">VALENKEEP</h1>
+      <div class="loader-bar-wrap">
+        <div id="loader-bar"></div>
+      </div>
+      <p id="loader-status">正在鍛造哥德石拱與 PBR 材質貼圖…</p>
+    </div>
+
+    <!-- Top Navigation Bar -->
+    <header class="hud top-hud">
+      <div class="brand-group">
+        <div class="brand-emblem" aria-hidden="true">
+          <svg viewBox="0 0 36 36">
+            <path d="M18 2 L32 10 L32 26 L18 34 L4 26 L4 10 Z" />
+            <circle cx="18" cy="18" r="7" />
+          </svg>
+        </div>
+        <div>
+          <div class="brand-name">VALENKEEP</div>
+          <div class="brand-tag">ROYAL GOTHIC SANCTUM · 古堡王座大殿</div>
+        </div>
+      </div>
+
+      <div class="mood-pills" role="group" aria-label="Lighting Mood">
+        <button class="mood-btn active" data-mood="golden">
+          <span class="mood-dot golden"></span>黃金斜陽
+        </button>
+        <button class="mood-btn" data-mood="moonlight">
+          <span class="mood-dot moon"></span>冷月聖堂
+        </button>
+        <button class="mood-btn" data-mood="hearth">
+          <span class="mood-dot hearth"></span>篝火晚宴
+        </button>
+      </div>
+
+      <div class="top-right-tools">
+        <div class="gpu-badge" id="gpu-badge" title="Renderer Backend & Frame Rate">
+          <span class="pulse-dot"></span>
+          <span id="gpu-text">WEBGPU · INIT</span>
+        </div>
+        <button class="tool-btn" id="btn-audio" title="環境音效 (壁爐柴火與古堡殘響)" aria-pressed="false">
+          <svg viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path class="wave-on" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+            <path class="wave-off" d="M22 9l-6 6M16 9l6 6" />
+          </svg>
+        </button>
+        <button class="tool-btn" id="btn-settings" title="渲染與鏡頭設定" aria-expanded="false">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+            <circle cx="9" cy="6" r="2" />
+            <circle cx="15" cy="12" r="2" />
+            <circle cx="10" cy="18" r="2" />
+          </svg>
+        </button>
+        <button class="tool-btn" id="btn-share" title="複製網址分享給別人">
+          <svg viewBox="0 0 24 24">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+          </svg>
+        </button>
+        <button class="tool-btn" id="btn-fullscreen" title="全螢幕切換 (F)">
+          <svg viewBox="0 0 24 24">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Settings Panel -->
+    <aside id="settings-drawer" class="hud glass-panel" hidden>
+      <div class="panel-header">
+        <span>RENDER & CAMERA · 渲染調校</span>
+        <button id="btn-close-settings" aria-label="關閉設定">×</button>
+      </div>
+      <div class="control-row">
+        <label for="ctrl-exposure">曝光度 Exposure <output id="out-exposure">105%</output></label>
+        <input id="ctrl-exposure" type="range" min="0.55" max="1.75" step="0.05" value="1.05" />
+      </div>
+      <div class="control-row">
+        <label for="ctrl-speed">漂浮速率 Drift Speed <output id="out-speed">1.0×</output></label>
+        <input id="ctrl-speed" type="range" min="0.2" max="2.5" step="0.1" value="1.0" />
+      </div>
+      <div class="control-row">
+        <label for="ctrl-rays">體積光束 God Rays <output id="out-rays">100%</output></label>
+        <input id="ctrl-rays" type="range" min="0" max="1.8" step="0.1" value="1.0" />
+      </div>
+      <div class="control-row">
+        <label for="ctrl-quality">渲染畫質 Quality</label>
+        <select id="ctrl-quality">
+          <option value="ultra">Ultra · 原生高解析 + GTAO + 輝光</option>
+          <option value="balanced">Balanced · 流暢省電模式</option>
+        </select>
+      </div>
+      <button id="btn-reset-cam" class="panel-action-btn">↺ 重置漂浮鏡頭至大殿入口</button>
+    </aside>
+
+    <!-- Left Scene Story Caption -->
+    <section class="hud hero-caption">
+      <div class="caption-kicker">
+        <span class="kicker-line"></span>
+        <span id="caption-sub">NAVE OF THE NORTHERN CROWN</span>
+      </div>
+      <h2 id="caption-title">皇室中殿巡禮</h2>
+      <p id="caption-desc">
+        陽光穿過高聳的哥德彩繪玫瑰花窗，在磨損反光的石板地與全身板甲之間灑落金色塵埃。
+      </p>
+    </section>
+
+    <!-- Right Camera Path Selector -->
+    <nav class="hud waypoint-nav" aria-label="Camera Viewpoints">
+      <div class="nav-heading">CAMERA PATHS · 漂浮視角</div>
+      <button class="waypoint-btn active" data-cam="nave">
+        <span class="wp-idx">01</span>
+        <span class="wp-name">皇室中殿巡禮</span>
+        <span class="wp-en">Grand Nave</span>
+      </button>
+      <button class="waypoint-btn" data-cam="throne">
+        <span class="wp-idx">02</span>
+        <span class="wp-name">玫瑰花窗與王座</span>
+        <span class="wp-en">Rose & Throne</span>
+      </button>
+      <button class="waypoint-btn" data-cam="hearth">
+        <span class="wp-idx">03</span>
+        <span class="wp-name">巨石壁爐與板甲</span>
+        <span class="wp-en">Grand Hearth</span>
+      </button>
+      <button class="waypoint-btn" data-cam="vault">
+        <span class="wp-idx">04</span>
+        <span class="wp-name">哥德肋拱與吊燈</span>
+        <span class="wp-en">Ribbed Vaults</span>
+      </button>
+      <button class="waypoint-btn" data-cam="aisle">
+        <span class="wp-idx">05</span>
+        <span class="wp-name">側廊柱列與盛宴</span>
+        <span class="wp-en">Colonnade Feast</span>
+      </button>
+    </nav>
+
+    <!-- Bottom Control Bar -->
+    <footer class="hud bottom-hud">
+      <div class="camera-mode-group">
+        <button id="btn-float-mode" class="mode-pill active" aria-pressed="true">
+          <span class="mode-icon" id="float-icon">✦</span>
+          <span id="float-label">漂浮運鏡中 · Floating</span>
+        </button>
+        <button id="btn-free-mode" class="mode-pill" aria-pressed="false">
+          <span class="mode-icon">✥</span>
+          <span>自由飛行 · Free Fly</span>
+        </button>
+      </div>
+
+      <div class="interaction-guide">
+        <span>拖曳環視 Drag</span>
+        <span class="sep">·</span>
+        <span>滾輪推進 Scroll</span>
+        <span class="sep">·</span>
+        <span><kbd>WASD</kbd> + <kbd>E</kbd><kbd>Q</kbd> 漫遊</span>
+        <span class="sep">·</span>
+        <span><kbd>Space</kbd> 暫停漂浮</span>
+      </div>
+
+      <div class="bottom-right-group">
+        <button id="btn-clean-ui" class="clean-ui-btn" title="隱藏介面享受純淨畫面 (H)">
+          純淨觀賞 <kbd>H</kbd>
+        </button>
+      </div>
+    </footer>
+
+    <!-- Mobile / Touch D-Pad -->
+    <div id="touch-pad" aria-label="Touch flight controls">
+      <button data-dir="up" aria-label="前進">▲</button>
+      <button data-dir="left" aria-label="左移">◀</button>
+      <button data-dir="down" aria-label="後退">▼</button>
+      <button data-dir="right" aria-label="右移">▶</button>
+      <button data-dir="rise" aria-label="上升">＋</button>
+      <button data-dir="sink" aria-label="下降">－</button>
+    </div>
+
+    <button id="btn-restore-ui" hidden>顯示介面 Show UI <kbd>H</kbd></button>
+    <div id="toast-banner" role="status" aria-live="polite"></div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
